@@ -227,52 +227,61 @@
         }
     }
 
-    async function calcularDeclinacao() {
-        const latInput = document.getElementById('latitude').value;
-        const lonInput = document.getElementById('longitude').value;
+   async function calcularDeclinacao() {
+    const latInput = document.getElementById('latitude').value;
+    const lonInput = document.getElementById('longitude').value;
 
-        const lat = parseCoordinate(latInput);
-        const lon = parseCoordinate(lonInput);
+    const lat = parseCoordinate(latInput);
+    const lon = parseCoordinate(lonInput);
 
-        if (isNaN(lat) || isNaN(lon)) {
-            alert('Por favor, insira coordenadas válidas.');
-            return;
-        }
-
-        try {
-            const response = await fetch(`https://www.ngdc.noaa.gov/geomag-web/calculators/calculateDeclination?lat1=${lat}&lon1=${lon}&resultFormat=json`);
-            const data = await response.json();
-
-            if (data && data.result && data.result.length > 0) {
-                const declinacao = data.result[0].declination;
-                const declinacaoSV = data.result[0].declination_sv;
-                const direcao = declinacao >= 0 ? 'E' : 'W';
-                const valorAbs = Math.abs(declinacao).toFixed(2);
-                
-                const textoResultado = `${valorAbs}° ${direcao} (${declinacao.toFixed(4)}°) | Variação Anual: ${declinacaoSV.toFixed(2)}'/ano`;
-                
-                document.getElementById('declinationValue').innerText = textoResultado;
-                document.getElementById('results').style.display = 'block';
-
-                atualizarMapa(lat, lon);
-                document.getElementById('exportActions').style.display = 'flex';
-
-                // Armazena estado dos dados para exportações
-                dadosCalculados = {
-                    data: new Date().toLocaleDateString('pt-BR'),
-                    latitude: lat,
-                    longitude: lon,
-                    declinacaoGraus: declinacao,
-                    direcao: direcao,
-                    variacaoAnual: declinacaoSV
-                };
-            } else {
-                alert('Não foi possível obter dados para essas coordenadas.');
-            }
-        } catch (error) {
-            alert('Erro na requisição da API de declinação.');
-        }
+    if (isNaN(lat) || isNaN(lon)) {
+        alert('Por favor, insira coordenadas válidas.');
+        return;
     }
+
+    try {
+        // URL da API da NOAA ajustada para HTTPS com Proxy CORS
+        const targetUrl = `https://www.ngdc.noaa.gov/geomag-web/calculators/calculateDeclination?lat1=${lat}&lon1=${lon}&resultFormat=json`;
+        const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
+
+        const response = await fetch(proxyUrl);
+        
+        if (!response.ok) {
+            throw new Error(`Erro HTTP: ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        if (data && data.result && data.result.length > 0) {
+            const declinacao = data.result[0].declination;
+            const declinacaoSV = data.result[0].declination_sv;
+            const direcao = declinacao >= 0 ? 'E' : 'W';
+            const valorAbs = Math.abs(declinacao).toFixed(2);
+            
+            const textoResultado = `${valorAbs}° ${direcao} (${declinacao.toFixed(4)}°) | Variação Anual: ${declinacaoSV.toFixed(2)}'/ano`;
+            
+            document.getElementById('declinationValue').innerText = textoResultado;
+            document.getElementById('results').style.display = 'block';
+
+            atualizarMapa(lat, lon);
+            document.getElementById('exportActions').style.display = 'flex';
+
+            dadosCalculados = {
+                data: new Date().toLocaleDateString('pt-BR'),
+                latitude: lat,
+                longitude: lon,
+                declinacaoGraus: declinacao,
+                direcao: direcao,
+                variacaoAnual: declinacaoSV
+            };
+        } else {
+            alert('Não foi possível obter dados para essas coordenadas.');
+        }
+    } catch (error) {
+        console.error("Detalhes do erro:", error);
+        alert('Erro ao consultar a API da NOAA. Verifique a conexão ou o console do navegador.');
+    }
+}
 
     function atualizarMapa(lat, lon) {
         const mapFrame = document.getElementById('googleMap');
