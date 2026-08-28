@@ -109,7 +109,7 @@
         }
         button.secondary:hover { background-color: #444444; }
 
-        /* Componente de Loader / Spinner */
+        /* Loader */
         .loading-box {
             display: none;
             flex-direction: column;
@@ -149,7 +149,8 @@
         }
 
         .results-box h2 { font-size: 1rem; color: var(--accent-color); margin-bottom: 8px; text-transform: uppercase; }
-        .results-box p { font-size: 1.1rem; font-weight: bold; color: #ffffff; }
+        .results-box p { font-size: 0.95rem; color: #e0e0e0; margin-bottom: 6px; }
+        .results-box p strong { color: #ffffff; }
 
         #map-container { margin-top: 20px; height: 350px; width: 100%; border-radius: 4px; overflow: hidden; border: 1px solid var(--border-color); }
         iframe { width: 100%; height: 100%; border: 0; }
@@ -178,13 +179,13 @@
         </div>
 
         <div class="form-group">
-            <label for="latitude">Latitude (ex: 22°01'S ou -22.0166):</label>
-            <input type="text" id="latitude" placeholder="22°01'S">
+            <label for="latitude">Latitude (DD ou DMS):</label>
+            <input type="text" id="latitude" placeholder="-22.0166 ou 22°01'S">
         </div>
 
         <div class="form-group">
-            <label for="longitude">Longitude (ex: 47°07'W ou -47.1166):</label>
-            <input type="text" id="longitude" placeholder="47°07'W">
+            <label for="longitude">Longitude (DD ou DMS):</label>
+            <input type="text" id="longitude" placeholder="-47.1166 ou 47°07'W">
         </div>
     </div>
 
@@ -201,7 +202,9 @@
 
     <div class="results-box" id="results" style="display: none;">
         <h2>Resultado Obtido (Modelo WMM/NOAA):</h2>
-        <p id="declinationValue">--</p>
+        <p><strong>Coordenadas (DMS):</strong> <span id="coordsDMS">--</span></p>
+        <p><strong>Coordenadas (Decimal):</strong> <span id="coordsDecimal">--</span></p>
+        <p><strong>Declinação Magnética:</strong> <span id="declinationValue" style="color: var(--accent-color); font-weight: bold; font-size: 1.1rem;">--</span></p>
     </div>
 
     <div id="map-container" style="display: none;">
@@ -230,10 +233,29 @@
         document.getElementById('btnCalcular').disabled = false;
     }
 
+    // Converte Graus Decimais para formato DMS (ex: -22.0166 -> 22°01'00"S)
+    function decimalParaDMS(deg, isLongitude = false) {
+        if (isNaN(deg)) return "";
+        const direcao = deg < 0 ? (isLongitude ? 'W' : 'S') : (isLongitude ? 'E' : 'N');
+        const absDeg = Math.abs(deg);
+        const d = Math.floor(absDeg);
+        const minFloat = (absDeg - d) * 60;
+        const m = Math.floor(minFloat);
+        const s = Math.round((minFloat - m) * 60);
+
+        return `${d}°${m.toString().padStart(2, '0')}'${s.toString().padStart(2, '0')}"${direcao}`;
+    }
+
+    // Converte entrada (seja DMS ou Decimal) para valor numérico Decimal
     function parseCoordinate(input) {
         if (!input) return NaN;
         let str = input.trim().toUpperCase();
-        if (!isNaN(str)) return parseFloat(str);
+
+        // Extrai o primeiro número decimal caso o texto contenha formatos mistos ex: "-22.0166 (22°01'00"S)"
+        const matchDecimalInText = str.match(/[-+]?\d*\.?\d+/);
+        if (matchDecimalInText && !str.includes('°') && !str.includes("'")) {
+            return parseFloat(matchDecimalInText[0]);
+        }
 
         const dmsRegex = /(\d+)[\°\s]+(?:(\d+)[\'\s]+)?(?:(\d+(?:\.\d+)?)[\"\s]*)?([NSEW])?/;
         const match = str.match(dmsRegex);
@@ -248,7 +270,8 @@
             if (direction === 'S' || direction === 'W') decimal = -decimal;
             return decimal;
         }
-        return NaN;
+
+        return parseFloat(str);
     }
 
     async function buscarPorCidade() {
@@ -268,8 +291,12 @@
                 const lat = parseFloat(data[0].lat);
                 const lon = parseFloat(data[0].lon);
 
-                document.getElementById('latitude').value = lat.toFixed(4);
-                document.getElementById('longitude').value = lon.toFixed(4);
+                const latDMS = decimalParaDMS(lat, false);
+                const lonDMS = decimalParaDMS(lon, true);
+
+                // Preenche o formulário exibindo os dois formatos lado a lado
+                document.getElementById('latitude').value = `${lat.toFixed(4)} (${latDMS})`;
+                document.getElementById('longitude').value = `${lon.toFixed(4)} (${lonDMS})`;
 
                 await calcularDeclinacao();
             } else {
@@ -328,9 +355,15 @@
         const direcao = declinacao >= 0 ? 'E' : 'W';
         const valorAbs = Math.abs(declinacao).toFixed(2);
         
-        const textoResultado = `${valorAbs}° ${direcao} (${declinacao.toFixed(4)}°) | Variação Anual: ${declinacaoSV ? declinacaoSV.toFixed(2) : '0.00'}'/ano`;
+        const latDMS = decimalParaDMS(lat, false);
+        const lonDMS = decimalParaDMS(lon, true);
+
+        // Preenche resultados formatados nos dois padrões
+        document.getElementById('coordsDMS').innerText = `${latDMS}, ${lonDMS}`;
+        document.getElementById('coordsDecimal').innerText = `${lat.toFixed(4)}°, ${lon.toFixed(4)}°`;
         
-        document.getElementById('declinationValue').innerText = textoResultado;
+        document.getElementById('declinationValue').innerText = `${valorAbs}° ${direcao} (${declinacao.toFixed(4)}°) | Variação Anual: ${declinacaoSV ? declinacaoSV.toFixed(2) : '0.00'}'/ano`;
+        
         document.getElementById('results').style.display = 'block';
 
         atualizarMapa(lat, lon);
@@ -338,8 +371,10 @@
 
         dadosCalculados = {
             data: new Date().toLocaleDateString('pt-BR'),
-            latitude: lat,
-            longitude: lon,
+            latitudeDecimal: lat.toFixed(4),
+            longitudeDecimal: lon.toFixed(4),
+            latitudeDMS: latDMS,
+            longitudeDMS: lonDMS,
             declinacaoGraus: declinacao,
             direcao: direcao,
             variacaoAnual: declinacaoSV || 0
@@ -363,8 +398,8 @@
     function exportarCSV() {
         if (!dadosCalculados) return;
 
-        const csvHeader = "Data,Latitude,Longitude,Declinacao_Graus,Direcao,Variacao_Anual_Min\n";
-        const csvRow = `${dadosCalculados.data},${dadosCalculados.latitude},${dadosCalculados.longitude},${dadosCalculados.declinacaoGraus},${dadosCalculados.direcao},${dadosCalculados.variacaoAnual}\n`;
+        const csvHeader = "Data,Lat_Decimal,Lon_Decimal,Lat_DMS,Lon_DMS,Declinacao_Graus,Direcao,Variacao_Anual_Min\n";
+        const csvRow = `${dadosCalculados.data},${dadosCalculados.latitudeDecimal},${dadosCalculados.longitudeDecimal},${dadosCalculados.latitudeDMS},${dadosCalculados.longitudeDMS},${dadosCalculados.declinacaoGraus},${dadosCalculados.direcao},${dadosCalculados.variacaoAnual}\n`;
 
         const blob = new Blob([csvHeader + csvRow], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement("a");
