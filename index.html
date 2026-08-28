@@ -233,30 +233,40 @@
         document.getElementById('btnCalcular').disabled = false;
     }
 
-    // Converte Graus Decimais para formato DMS (ex: -22.0166 -> 22°01'00"S)
-    function decimalParaDMS(deg, isLongitude = false) {
-        if (isNaN(deg)) return "";
-        const direcao = deg < 0 ? (isLongitude ? 'W' : 'S') : (isLongitude ? 'E' : 'N');
-        const absDeg = Math.abs(deg);
-        const d = Math.floor(absDeg);
-        const minFloat = (absDeg - d) * 60;
-        const m = Math.floor(minFloat);
-        const s = Math.round((minFloat - m) * 60);
+    // Converte Decimal para DMS puro (ex: -22.0166 -> 22°01'00"S)
+    function decimalParaDMS(val, isLongitude = false) {
+        let num = Number(val);
+        if (isNaN(num)) return "";
+        
+        const direcao = num < 0 ? (isLongitude ? 'W' : 'S') : (isLongitude ? 'E' : 'N');
+        const absVal = Math.abs(num);
+        
+        const degrees = Math.floor(absVal);
+        const minutesFloat = (absVal - degrees) * 60;
+        const minutes = Math.floor(minutesFloat);
+        const seconds = Math.round((minutesFloat - minutes) * 60);
 
-        return `${d}°${m.toString().padStart(2, '0')}'${s.toString().padStart(2, '0')}"${direcao}`;
+        return `${degrees}°${minutes.toString().padStart(2, '0')}'${seconds.toString().padStart(2, '0')}"${direcao}`;
     }
 
-    // Converte entrada (seja DMS ou Decimal) para valor numérico Decimal
+    // Converte entradas em formato DMS ou Decimal para um valor Float Decimal puro
     function parseCoordinate(input) {
-        if (!input) return NaN;
-        let str = input.trim().toUpperCase();
+        if (input === null || input === undefined) return NaN;
+        
+        let str = String(input).trim().toUpperCase();
+        if (!str) return NaN;
 
-        // Extrai o primeiro número decimal caso o texto contenha formatos mistos ex: "-22.0166 (22°01'00"S)"
-        const matchDecimalInText = str.match(/[-+]?\d*\.?\d+/);
-        if (matchDecimalInText && !str.includes('°') && !str.includes("'")) {
-            return parseFloat(matchDecimalInText[0]);
+        // Limpa parênteses se o texto for do tipo "-22.0166 (22°01'00"S)"
+        if (str.includes('(')) {
+            str = str.split('(')[0].trim();
         }
 
+        // Se for número decimal puro
+        if (!isNaN(str)) {
+            return parseFloat(str);
+        }
+
+        // Parser para DMS
         const dmsRegex = /(\d+)[\°\s]+(?:(\d+)[\'\s]+)?(?:(\d+(?:\.\d+)?)[\"\s]*)?([NSEW])?/;
         const match = str.match(dmsRegex);
 
@@ -288,13 +298,13 @@
             const data = await response.json();
 
             if (data.length > 0) {
-                const lat = parseFloat(data[0].lat);
-                const lon = parseFloat(data[0].lon);
+                // Garante a conversão para Number puro
+                const lat = Number(data[0].lat);
+                const lon = Number(data[0].lon);
 
                 const latDMS = decimalParaDMS(lat, false);
                 const lonDMS = decimalParaDMS(lon, true);
 
-                // Preenche o formulário exibindo os dois formatos lado a lado
                 document.getElementById('latitude').value = `${lat.toFixed(4)} (${latDMS})`;
                 document.getElementById('longitude').value = `${lon.toFixed(4)} (${lonDMS})`;
 
@@ -317,6 +327,7 @@
         const lon = parseCoordinate(lonInput);
 
         if (isNaN(lat) || isNaN(lon)) {
+            ocultarLoading();
             alert('Por favor, insira coordenadas válidas.');
             return;
         }
@@ -358,7 +369,6 @@
         const latDMS = decimalParaDMS(lat, false);
         const lonDMS = decimalParaDMS(lon, true);
 
-        // Preenche resultados formatados nos dois padrões
         document.getElementById('coordsDMS').innerText = `${latDMS}, ${lonDMS}`;
         document.getElementById('coordsDecimal').innerText = `${lat.toFixed(4)}°, ${lon.toFixed(4)}°`;
         
