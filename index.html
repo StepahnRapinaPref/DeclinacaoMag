@@ -95,11 +95,12 @@
             cursor: pointer; 
             color: #121212; 
             background-color: var(--accent-color); 
-            transition: background 0.2s;
+            transition: background 0.2s, opacity 0.2s;
             min-width: 150px;
         }
 
         button:hover { background-color: var(--accent-hover); }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
 
         button.secondary { 
             background-color: #333333; 
@@ -107,6 +108,37 @@
             border: 1px solid var(--border-color);
         }
         button.secondary:hover { background-color: #444444; }
+
+        /* Componente de Loader / Spinner */
+        .loading-box {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            margin-top: 20px;
+            gap: 10px;
+        }
+
+        .spinner {
+            width: 36px;
+            height: 36px;
+            border: 4px solid var(--border-color);
+            border-top: 4px solid var(--accent-color);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        .loading-text {
+            font-size: 0.85rem;
+            color: var(--accent-color);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
 
         .results-box { 
             margin-top: 25px; 
@@ -157,8 +189,14 @@
     </div>
 
     <div class="btn-group">
-        <button onclick="buscarPorCidade()" class="secondary">Buscar Cidade</button>
-        <button onclick="calcularDeclinacao()">Calcular Declinação</button>
+        <button onclick="buscarPorCidade()" id="btnBuscar" class="secondary">Buscar Cidade</button>
+        <button onclick="calcularDeclinacao()" id="btnCalcular">Calcular Declinação</button>
+    </div>
+
+    <!-- Indicador de Carregamento -->
+    <div class="loading-box" id="loadingSpinner">
+        <div class="spinner"></div>
+        <div class="loading-text" id="loadingText">Processando dados...</div>
     </div>
 
     <div class="results-box" id="results" style="display: none;">
@@ -178,6 +216,19 @@
 
 <script>
     let dadosCalculados = null;
+
+    function exibirLoading(mensagem) {
+        document.getElementById('loadingText').innerText = mensagem;
+        document.getElementById('loadingSpinner').style.display = 'flex';
+        document.getElementById('btnBuscar').disabled = true;
+        document.getElementById('btnCalcular').disabled = true;
+    }
+
+    function ocultarLoading() {
+        document.getElementById('loadingSpinner').style.display = 'none';
+        document.getElementById('btnBuscar').disabled = false;
+        document.getElementById('btnCalcular').disabled = false;
+    }
 
     function parseCoordinate(input) {
         if (!input) return NaN;
@@ -207,6 +258,8 @@
             return;
         }
 
+        exibirLoading('Buscando coordenadas da cidade...');
+
         try {
             const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(city)}`);
             const data = await response.json();
@@ -218,11 +271,13 @@
                 document.getElementById('latitude').value = lat.toFixed(4);
                 document.getElementById('longitude').value = lon.toFixed(4);
 
-                calcularDeclinacao();
+                await calcularDeclinacao();
             } else {
+                ocultarLoading();
                 alert('Cidade não encontrada.');
             }
         } catch (error) {
+            ocultarLoading();
             alert('Erro ao buscar localização.');
         }
     }
@@ -239,7 +294,8 @@
             return;
         }
 
-        // Tenta obter a declinação via proxy direto para a NOAA
+        exibirLoading('Calculando declinação magnética...');
+
         const noaaUrl = `https://www.ngdc.noaa.gov/geomag-web/calculators/calculateDeclination?lat1=${lat}&lon1=${lon}&resultFormat=json`;
         const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(noaaUrl)}`;
 
@@ -256,15 +312,16 @@
                     lat, 
                     lon
                 );
+                ocultarLoading();
                 return;
             }
         } catch (err) {
             console.warn('Proxy NOAA falhou, aplicando modelo magnético regional...');
         }
 
-        // Fallback: Modelo magnético simplificado caso ocorra indisponibilidade da rede
         const declinacaoAproximada = calcularWMMSimplificado(lat, lon);
         exibirResultado(declinacaoAproximada, 0, lat, lon);
+        ocultarLoading();
     }
 
     function exibirResultado(declinacao, declinacaoSV, lat, lon) {
@@ -327,7 +384,6 @@
         const mapContainer = document.getElementById('map-container');
         const exportActions = document.getElementById('exportActions');
 
-        // Oculta elementos irrelevantes/bloqueados por CORS para o PDF não falhar
         mapContainer.style.display = 'none';
         exportActions.style.display = 'none';
 
@@ -341,7 +397,6 @@
         };
 
         html2pdf().set(opt).from(element).save().then(() => {
-            // Restaura exibição após exportar
             mapContainer.style.display = 'block';
             exportActions.style.display = 'flex';
         });
